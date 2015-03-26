@@ -1,0 +1,6 @@
+C:\Users\Federico\Dropbox\University\Magistrale\Laboratory on Algorithms for Big Data (LAD)\CompressingWebPages\CompressingWebPages\bin\x64\Release\CompressingWebPages.exe.config
+C:\Users\Federico\Dropbox\University\Magistrale\Laboratory on Algorithms for Big Data (LAD)\CompressingWebPages\CompressingWebPages\bin\x64\Release\CompressingWebPages.exe
+C:\Users\Federico\Dropbox\University\Magistrale\Laboratory on Algorithms for Big Data (LAD)\CompressingWebPages\CompressingWebPages\bin\x64\Release\CompressingWebPages.pdb
+C:\Users\Federico\Dropbox\University\Magistrale\Laboratory on Algorithms for Big Data (LAD)\CompressingWebPages\CompressingWebPages\obj\x64\Release\CompressingWebPages.exe
+C:\Users\Federico\Dropbox\University\Magistrale\Laboratory on Algorithms for Big Data (LAD)\CompressingWebPages\CompressingWebPages\obj\x64\Release\CompressingWebPages.pdb
+C:\Users\Federico\Dropbox\University\Magistrale\Laboratory on Algorithms for Big Data (LAD)\CompressingWebPages\CompressingWebPages\obj\x64\Release\CompressingWebPages.csprojResolveAssemblyReference.cache

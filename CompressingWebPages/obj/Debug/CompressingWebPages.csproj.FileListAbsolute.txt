@@ -1,0 +1,12 @@
+C:\Users\Federico\Dropbox\University\Magistrale\Laboratory on Algorithms for Big Data (LAD)\CompressingWebPages\CompressingWebPages\bin\Debug\CompressingWebPages.exe.config
+C:\Users\Federico\Dropbox\University\Magistrale\Laboratory on Algorithms for Big Data (LAD)\CompressingWebPages\CompressingWebPages\bin\Debug\CompressingWebPages.exe
+C:\Users\Federico\Dropbox\University\Magistrale\Laboratory on Algorithms for Big Data (LAD)\CompressingWebPages\CompressingWebPages\bin\Debug\CompressingWebPages.pdb
+C:\Users\Federico\Dropbox\University\Magistrale\Laboratory on Algorithms for Big Data (LAD)\CompressingWebPages\CompressingWebPages\obj\Debug\CompressingWebPages.csprojResolveAssemblyReference.cache
+C:\Users\Federico\Dropbox\University\Magistrale\Laboratory on Algorithms for Big Data (LAD)\CompressingWebPages\CompressingWebPages\obj\Debug\CompressingWebPages.exe
+C:\Users\Federico\Dropbox\University\Magistrale\Laboratory on Algorithms for Big Data (LAD)\CompressingWebPages\CompressingWebPages\obj\Debug\CompressingWebPages.pdb
+C:\Users\Federico\Desktop\CompressingWebPages\CompressingWebPages\bin\Debug\CompressingWebPages.exe.config
+C:\Users\Federico\Desktop\CompressingWebPages\CompressingWebPages\obj\Debug\CompressingWebPages.exe
+C:\Users\Federico\Desktop\CompressingWebPages\CompressingWebPages\obj\Debug\CompressingWebPages.pdb
+C:\Users\Federico\Desktop\CompressingWebPages\CompressingWebPages\obj\Debug\CompressingWebPages.csprojResolveAssemblyReference.cache
+C:\Users\Federico\Desktop\CompressingWebPages\CompressingWebPages\bin\Debug\CompressingWebPages.exe
+C:\Users\Federico\Desktop\CompressingWebPages\CompressingWebPages\bin\Debug\CompressingWebPages.pdb
