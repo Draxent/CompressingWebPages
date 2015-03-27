@@ -15,7 +15,7 @@ namespace CompressingWebPages
 		// LSH Threshold t = (1/b)^(1/r), that in this case, where b = 37 and r = 3, the threshold t = 30%
 		public const int LSH_NUMITER = 37; // b
 		public const int LSH_NUMPICK = 3; // r
-		public const string WORKING_DIRECTORY = @"C:\Users\Federico\Desktop\BigData\Project2\Results\3000K\";
+		public const string WORKING_DIRECTORY = @".\10K\";
 
 		public static Stopwatch stopWatch;
 
