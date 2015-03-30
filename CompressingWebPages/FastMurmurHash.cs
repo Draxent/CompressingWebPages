@@ -17,26 +17,16 @@ namespace CompressingWebPages
 			this.seed = seed;
 		}
 
+		#region Hash
 		public ulong Hash(ulong key)
 		{
-			byte[] data = new byte[8];
-			data[0] = (byte)key;
-			data[1] = (byte)(key >> 8);
-			data[2] = (byte)(key >> 16);
-			data[3] = (byte)(key >> 24);
-			data[4] = (byte)(key >> 32);
-			data[5] = (byte)(key >> 40);
-			data[6] = (byte)(key >> 48);
-			data[7] = (byte)(key >> 56);
+			ulong h = this.seed ^ m;
 
-			ulong h = this.seed ^ 8;
-			ulong k = (ulong)(data[0] | data[1] << 8 | data[2] << 16 | data[3] << 32);
+			key *= m;
+			key ^= key >> r;
+			key *= m;
 
-			k *= m;
-			k ^= k >> r;
-			k *= m;
-
-			h ^= k;
+			h ^= key;
 			h *= m;
 
 			h ^= h >> r;
@@ -45,5 +35,6 @@ namespace CompressingWebPages
 
 			return h;
 		}
+		#endregion
 	}
 }
