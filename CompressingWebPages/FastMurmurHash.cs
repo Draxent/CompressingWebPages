@@ -12,10 +12,12 @@ namespace CompressingWebPages
 		const int r = 47;
 		private uint seed;
 
+		#region CONSTRUCTOR
 		public FastMurmurHash(uint seed)
 		{
 			this.seed = seed;
 		}
+		#endregion
 
 		#region Hash
 		public ulong Hash(ulong key)

@@ -4,15 +4,30 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using System.IO.MemoryMappedFiles;
 
 namespace CompressingWebPages
 {
-	class WebPage
+
+	[Flags]
+	public enum Info { IsHTML = 1, StartPage = 2, HTMLStart = 4, Length = 8, NewStartPage = 16, URL = 32, Signature = 64 }
+
+	public struct WebPage
+	{
+		public int ID;
+		public bool IsHTML;
+		public long StartPage;
+		public long HTMLStart;
+		public int Length;
+		public long NewStartPage;
+		public string URL;
+		public ulong[] Signature;
+	}
+
+	class ProcessWebPage
 	{
 		private const long PRIME_NUMBER = 994534132561;
 		private const int QGRAMS = 25;
-		private const int MAX_WINDOW = 500;
+		private const int MAX_WINDOW_SEARCH = 1024;
 
 		#region List Bytes
 		// The list below shows all bytes arrays used searching in the web-page
@@ -35,126 +50,153 @@ namespace CompressingWebPages
 		private static readonly byte[] CLOSE_SCRIPT2 = new byte[] { 60, 47, 83, 67, 82, 73, 80, 84, 62 }; // "</SCRIPT>"
 		#endregion
 
-		public uint ID { get; private set; }
-		public long Length { get; private set; }
-		public long StartPage { get; private set; }
-		public long NewStartPage { get; set; }
-		public ulong[] Signature { get; private set; }
-		public string URL { get; private set; }
-
-		private long htmlRelative, endPageRelative, endPage;
-		private ScanningFile sf = null;
+		public WebPage WebPage;
 
 		#region CONSTRUCTOR
-		public WebPage(uint idPage, ScanningFile sf, FastMurmurHash[] permutations, long endLastPage)
+		public ProcessWebPage(int idPage, ScanningFile sf, long endLastPage)
 		{
 			Tuple<bool, long> t;
-			this.ID = idPage;
-			this.sf = sf;
+			this.WebPage = ProcessWebPage.InitWebPage(idPage);
 
 			// Finds the start of the web page
-			t = sf.Search(new byte[][] { STARTPAGE }, 1, endLastPage);
+			t = sf.Search(new byte[][] { STARTPAGE }, endLastPage, MAX_WINDOW_SEARCH);
 			// There are no more page. Reached End of File (EOF).
 			if (!t.Item1)
 				throw new EndOfStreamException();
-			long startPageRelative = t.Item2;
-			this.StartPage = sf.AbsoluteLocation(startPageRelative);
+			long sp = t.Item2;
+			this.WebPage.StartPage = sf.AbsoluteLocation(sp);
 
 			// Get the WARC size
-			long sizeEnd = sf.Search(WHITE_SPACE, startPageRelative + 9).Item2 - 1;
-			long warcSize = Convert.ToInt64(sf.Copy(startPageRelative + 9, sizeEnd));
+			long sizeEnd = sf.Search(WHITE_SPACE, sp + 9, MAX_WINDOW_SEARCH).Item2 - 1;
+			this.WebPage.Length = Convert.ToInt32(sf.Copy(sp + 9, sizeEnd));
 
 			// Get the URL
-			long urlStart = sf.Search(new byte[][] { RESPONSE }, 1, sizeEnd).Item2 + 9;
+			long urlStart = sf.Search(new byte[][] { RESPONSE }, sizeEnd).Item2 + 9;
 			long urlEnd = sf.Search(WHITE_SPACE, urlStart + 1).Item2 - 1;
-			this.URL = sf.Copy(urlStart, urlEnd);
+			this.WebPage.URL = sf.Copy(urlStart, urlEnd);
 
 			// Finds the content-type of the page
-			t = sf.Search(new byte[][] { CONTENT_TYPE }, 1, urlEnd, null, MAX_WINDOW);
-			long contentTypeStart = t.Item2, contentTypeEnd;
-			bool ishtmlpage = t.Item1;
+			t = sf.Search(new byte[][] { CONTENT_TYPE }, urlEnd, this.WebPage.Length - (urlEnd - sp));
+			long contentTypeStart = t.Item2 + 14, contentTypeEnd;
+			this.WebPage.IsHTML = t.Item1;
 			if (t.Item1)
 			{
-				contentTypeEnd = sf.Search(WHITE_SPACE, contentTypeStart + 14).Item2 - 1;
-				ishtmlpage = sf.Copy(contentTypeStart, contentTypeEnd).ToLower().Contains("html");
+				contentTypeEnd = sf.Search(WHITE_SPACE, contentTypeStart, this.WebPage.Length - (contentTypeStart - sp)).Item2 - 1;
+				this.WebPage.IsHTML = sf.Copy(contentTypeStart, contentTypeEnd).ToLower().Contains("html");
 			}
 
 			// If we could find the content-type and it is of html type we can looking for the <html> tag
-			if (ishtmlpage)
+			if (this.WebPage.IsHTML)
 			{
 				// Finds the pointer to the <html> (or <head>/<body>) part.
-				t = sf.Search(new byte[][] { HTML1, HTML2, HEAD1, HEAD2, BODY1, BODY2 }, 6, urlEnd, STARTPAGE);
+				t = sf.Search(new byte[][] { HTML1, HTML2, HEAD1, HEAD2, BODY1, BODY2 }, contentTypeStart, this.WebPage.Length - (contentTypeStart - sp));
 
-				// If it can find it, means that we have an HTML document
-				if (t.Item1)
-				{
-					this.Signature = new ulong[sf.SketchVectorSize];
-					this.htmlRelative = t.Item2;
-					this.CalculateSignature(permutations);
-				}
-				ishtmlpage = t.Item1;
+				this.WebPage.IsHTML = t.Item1;
+				if (this.WebPage.IsHTML)
+					this.WebPage.HTMLStart = sf.AbsoluteLocation(t.Item2);
 			}
+		}
+		#endregion
 
-			// If we could not find the content-type or it is not html type, or we could not find the <html> tag
-			// we do NOT compute the signature and we ignore the page
-			if (!ishtmlpage)
+		#region InitWebPage
+		public static WebPage InitWebPage(int id)
+		{
+			WebPage wp = new WebPage();
+			wp.ID = id;
+			wp.IsHTML = false;
+			wp.StartPage = -1;
+			wp.HTMLStart = -1;
+			wp.Length = -1;
+			wp.NewStartPage = -1;
+			wp.Signature = null;
+			wp.URL = null;
+			return wp;
+		}
+		#endregion
+
+		#region Match
+		private static bool Match(byte[] content, int length, int i, byte b)
+		{
+			if (i >= length) return false;
+			return (content[i] == b);
+		}
+		private static bool MatchBytes(byte[] content, int length, int i, byte[] bb)
+		{
+			foreach (byte b in bb)
+				if (!Match(content, length, i++, b)) return false;
+			return true;
+		}
+		private static bool MatchBytes(byte[] content, int length, int i, byte[] bb1, byte[] bb2)
+		{
+			bool matched = MatchBytes(content, length, i, bb1);
+			if (!matched)
+				matched = MatchBytes(content, length, i, bb2);
+			return matched;
+		}
+		#endregion
+
+		#region Search
+		public static int Search(byte[] content, int length, byte patternByte, int offset = 0)
+		{
+			for (int i = offset; i < length; i++)
+				if (content[i] == patternByte) return i;
+			return -1;
+		}
+		public static int Search(byte[] content, int length, byte[] pattern1, byte[] pattern2 = null, int offset = 0)
+		{
+			for (int i = offset; i < length; i++)
 			{
-				this.htmlRelative = startPageRelative + 8;
-				this.endPageRelative = sf.Search(new byte[][] { STARTPAGE }, 1, startPageRelative + warcSize).Item2 - 1;
-				this.endPage = sf.AbsoluteLocation(this.endPageRelative);
+				bool found = true;
+				// Searches the pattern
+				for (int j = 0; j < pattern1.Length; j++)
+					if (content[i + j] != pattern1[j]) { found = false; break; }
+				if (found) return i;
+
+				if (pattern2 != null)
+				{
+					found = true;
+					// Searches the pattern
+					for (int j = 0; j < pattern2.Length; j++)
+						if (content[i + j] != pattern2[j]) { found = false; break; }
+					if (found) return i;
+				}
 			}
-
-			this.Length = this.endPage - this.StartPage + 1;
-		}
-		#endregion
-
-		#region GetRelativeEndPage
-		public long GetRelativeEndPage()
-		{
-			return this.endPageRelative;
-		}
-		#endregion
-
-		#region GetContent
-		public MemoryMappedViewStream GetContent(bool html = false)
-		{
-			return sf.ReadFile(this.StartPage, this.Length);
+			return -1;
 		}
 		#endregion
 
 		#region WordSegmentation
 		// Scan the html content and divides it in words
-		private IEnumerator<Tuple<long, int>> WordSegmentation()
+		private static IEnumerator<Tuple<int, int>> WordSegmentation(byte[] content, int length)
 		{
 			bool addWord = false;
-			long i = this.htmlRelative, start = 0, end = 0;
+			int start = 0, end = 0;
 
-			// Continues until it reach another web page or the EOF
-			while (!sf.EOF(i) && !sf.MatchBytes(i, STARTPAGE))
+			for (int i = 0; i < length; i++)
 			{
 				start = i;
 
 				// Found SCRIPT
-				if (sf.MatchBytes(i, OPEN_SCRIPT1, OPEN_SCRIPT2))
+				if (ProcessWebPage.MatchBytes(content, length, i, OPEN_SCRIPT1, OPEN_SCRIPT2))
 				{
 					// Skips all until it find the tag closure </script> (Supposing that the Web Page are well formed)
-					i = sf.Search(new byte[][] { CLOSE_SCRIPT1, CLOSE_SCRIPT2 }, 2, start, STARTPAGE).Item2 + 8;
+					i = ProcessWebPage.Search(content, length, CLOSE_SCRIPT1, CLOSE_SCRIPT2, i) + 8;
 					addWord = true;
 				}
 				// Found TAG
-				else if ((sf.Match(i, OPEN_BRACKET)) && (!sf.Match(i + 1, EXCLAMATION_MARK)))
+				else if (ProcessWebPage.Match(content, length, i, OPEN_BRACKET) && (!ProcessWebPage.Match(content, length, i + 1, EXCLAMATION_MARK)))
 				{
 					// Skips all until it find a tag closure (Supposing that the Web Page are well formed)
-					i = sf.Search(CLOSE_BRACKET, start, STARTPAGE).Item2;
+					i = ProcessWebPage.Search(content, length, CLOSE_BRACKET, i);
 					addWord = true;
 				}
 				// Found WORD
-				else if (!Char.IsWhiteSpace(sf.GetChar(i)))
+				else if (!Char.IsWhiteSpace((char)content[i]))
 				{
 					// Skips all until it find a space or a tag opening (so a "<" and not a "<!")
 					// We don't check the EOF since we expected to reach the TAG </html> somewhere,
 					// if the file end before GetChar will raise an exception 
-					while (!(Char.IsWhiteSpace(sf.GetChar(i)) || (sf.Match(i, OPEN_BRACKET) && (!sf.Match(i + 1, EXCLAMATION_MARK)))))
+					while (i < length && !(Char.IsWhiteSpace((char)content[i]) || (ProcessWebPage.Match(content, length, i, OPEN_BRACKET) && (!ProcessWebPage.Match(content, length, i + 1, EXCLAMATION_MARK)))))
 						i++;
 					i--; addWord = true;
 				}
@@ -162,42 +204,33 @@ namespace CompressingWebPages
 				if (addWord)
 				{
 					end = i; addWord = false;
-					// A word is represented by a pointer to the word itself in the html Content and by its size
-					yield return new Tuple<long, int>(start, (int)(end - start + 1));
-					//string word = System.Text.Encoding.Default.GetString(sf.Copy(start, end + 1));
 
-					// If we reach this point should mean that we have already used the discovered word, so we can free the buffer.
-					i = sf.Free(end);
+					// If there we found an error interrupt the process
+					if (end <= start) break;
+
+					// A word is represented by a pointer to the start of the word itself and its length
+					yield return new Tuple<int, int>(start, end - start + 1);
 				}
-
-				i++;
 			}
-
-			// Calculates the position of the end of the page.
-			this.endPageRelative = i - 1;
-			this.endPage = sf.AbsoluteLocation(this.endPageRelative);
 		}
 		#endregion
 
 		#region FingerPrint
-		private ulong FingerPrint(Tuple<long, int> word)
+		private static ulong FingerPrint(byte[] content, Tuple<int, int> word)
 		{
 			ulong sig = 0;
-			long start = word.Item1, end = start + word.Item2;
-
-			for (long k = start; k < end; k++)
+			for (long k = word.Item1; k < word.Item2 - word.Item1; k++)
 			{
 				//Karp-Rabin hashing
-				sig = (sig << 8) + (ulong)sf.Get(k);
+				sig = (sig << 8) + (ulong)content[k];
 				if (sig > PRIME_NUMBER) { sig %= PRIME_NUMBER; }
 			}
-
 			return sig;
 		}
 		#endregion
 
 		#region CumulativeFingerPrint
-		private ulong CumulativeFingerPrint(List<Tuple<ulong, int>> bufferFingers, int q)
+		private static ulong CumulativeFingerPrint(List<Tuple<ulong, int>> bufferFingers, int q)
 		{
 			ulong sig = 0;
 
@@ -211,11 +244,11 @@ namespace CompressingWebPages
 		#endregion
 
 		#region Shingling
-		private List<ulong> Shingling()
+		private static List<ulong> Shingling(byte[] content, int length)
 		{
 			// A shingle is represented by the fingerprint and the total size of about QGRAMS
 			List<ulong> shingles = new List<ulong>();
-			IEnumerator<Tuple<long, int>> words = WordSegmentation();
+			IEnumerator<Tuple<int, int>> words = ProcessWebPage.WordSegmentation(content, length);
 			List<Tuple<ulong, int>> bufferFingers = new List<Tuple<ulong, int>>();
 
 			int gramCounter = 0, sizeBuffer = 0;
@@ -229,17 +262,16 @@ namespace CompressingWebPages
 					// Reached EOP (End Of Page) before QGRAMS
 					if (!canMove)
 					{
-						shingles.Add(this.CumulativeFingerPrint(bufferFingers, sizeBuffer));
+						shingles.Add(ProcessWebPage.CumulativeFingerPrint(bufferFingers, sizeBuffer));
 						return shingles;
 					}
 
-					//string ss = System.Text.Encoding.Default.GetString(sf.Copy(s, s + l));
-					bufferFingers.Add(new Tuple<ulong, int>(FingerPrint(words.Current), words.Current.Item2));
+					bufferFingers.Add(new Tuple<ulong, int>(ProcessWebPage.FingerPrint(content, words.Current), words.Current.Item2));
 					gramCounter += words.Current.Item2;
 					sizeBuffer++;
 				}
 
-				shingles.Add(this.CumulativeFingerPrint(bufferFingers, sizeBuffer));
+				shingles.Add(ProcessWebPage.CumulativeFingerPrint(bufferFingers, sizeBuffer));
 
 				// Remove first word
 				gramCounter -= bufferFingers[0].Item2;
@@ -250,9 +282,10 @@ namespace CompressingWebPages
 		#endregion
 
 		#region CalculateSignature
-		private void CalculateSignature(FastMurmurHash[] permutations)
+		public static ulong[] CalculateSignature(byte[] content, int length, FastMurmurHash[] permutations)
 		{
-			List<ulong> shingles = this.Shingling();
+			ulong[] signature = new ulong[GlobalVars.SKETCH_VECTOR_SIZE];
+			List<ulong> shingles = ProcessWebPage.Shingling(content, length);
 
 			int k = 0;
 			foreach (FastMurmurHash pi in permutations)
@@ -263,9 +296,11 @@ namespace CompressingWebPages
 					ulong s = pi.Hash(shingle);
 					if (s < min) min = s;
 				}
-				Signature[k] = min;
+				signature[k] = min;
 				k++;
 			}
+
+			return signature;
 		}
 		#endregion
 	}

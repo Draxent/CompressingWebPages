@@ -3,67 +3,67 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.IO;
+using System.IO.MemoryMappedFiles;
 
 
 namespace CompressingWebPages
 {
 	class LSH
 	{
-		private int sketchSize;
-		private int numPick;
-		private int numIter;
+		// LSH Threshold t = (1/b)^(1/r), that in this case, where b = 7 and r = 3, the threshold t = 52%
+		public const int NUMITER = 7; // b
+		public const int NUMPICK = 3; // r
+
 		private int[][] drawings;
-		private Dictionary<ulong, List<WebPage>>[] buckets;
+		private Dictionary<ulong, List<int>>[] buckets;
 
 		#region CONSTRUCTOR
-		public LSH(int sketchSize, int numIter, int numPick)
+		public LSH()
 		{
 			Random rnd = new Random();
-			this.sketchSize = sketchSize;
-			this.numIter = numIter;
-			this.numPick = numPick;
-			this.drawings = new int[numIter][];
-			this.buckets = new Dictionary<ulong, List<WebPage>>[numIter];
+			this.drawings = new int[NUMITER][];
+			this.buckets = new Dictionary<ulong, List<int>>[NUMITER];
 
-			for (int i = 0; i < numIter; i++)
+			for (int i = 0; i < NUMITER; i++)
 			{
 				HashSet<int> set = new HashSet<int>();
-				this.drawings[i] = new int[numPick];
-				this.buckets[i] = new Dictionary<ulong, List<WebPage>>();
+				this.drawings[i] = new int[NUMPICK];
+				this.buckets[i] = new Dictionary<ulong, List<int>>();
 
-				while (set.Count < this.numPick)
-					set.Add(rnd.Next(sketchSize - 1));
+				while (set.Count < NUMPICK)
+					set.Add(rnd.Next(GlobalVars.SKETCH_VECTOR_SIZE - 1));
 				this.drawings[i] = set.ToArray();
 			}
 		}
 		#endregion
 
 		#region HashFunction
-		private static ulong HashFunction(int numPick, ulong[] signature, int[] drawings)
+		private static ulong HashFunction(ulong[] signature, int[] drawings)
 		{
 			ulong sum = 0;
-			for (int j = 0; j < numPick; j++)
+			for (int j = 0; j < NUMPICK; j++)
 				sum += signature[drawings[j]];
 			return sum;
 		}
 		#endregion
 
 		#region AddDocument
-		public void AddDocument(WebPage wp)
+		public void AddDocument(int id, ulong[] signature)
 		{
-			if (wp.Signature == null)
+			if (signature == null)
 				throw new ArgumentNullException();
 
-			for (int i = 0; i < this.numIter; i++)
+			for (int i = 0; i < NUMITER; i++)
 			{
-				ulong v = HashFunction(this.numPick, wp.Signature, this.drawings[i]);
+				ulong v = HashFunction(signature, this.drawings[i]);
 
 				if (this.buckets[i].ContainsKey(v))
-					this.buckets[i][v].Add(wp);
+					this.buckets[i][v].Add(id);
 				else
 				{
-					List<WebPage> l = new List<WebPage>();
-					l.Add(wp);
+					List<int> l = new List<int>();
+					l.Add(id);
 					this.buckets[i].Add(v, l);
 				}
 			}
@@ -71,37 +71,47 @@ namespace CompressingWebPages
 		#endregion
 
 		#region FindSimilar
-		private void FindSimilar(HashSet<WebPage> similarDoc, WebPage wp)
+		private void FindSimilar(HashSet<int> similarDoc, int id, ulong[] signature, HashSet<int>[] skip)
 		{
-			if (wp.Signature == null)
+			if (signature == null)
 				throw new ArgumentNullException();
 
-			for (int i = 0; i < this.numIter; i++)
+			for (int i = 0; i < NUMITER; i++)
 			{
-				ulong v = HashFunction(this.numPick, wp.Signature, this.drawings[i]);
+				if (skip[i].Contains(id))
+					continue;
+
+				ulong v = HashFunction(signature, this.drawings[i]);
 
 				if (!this.buckets[i].ContainsKey(v))
 					throw new InvalidOperationException();
 
-				foreach (WebPage sim in this.buckets[i][v])
+				foreach (int sim in this.buckets[i][v])
+				{
 					similarDoc.Add(sim);
+					skip[i].Add(sim);
+				}
 			}
 		}
 		#endregion
 
 		#region UnionFind
-		public HashSet<WebPage> UnionFind(WebPage wp)
+		public HashSet<int> UnionFind(List<WebPage> webpages, int id)
 		{
-			HashSet<WebPage> similarDoc = new HashSet<WebPage>();
-			HashSet<WebPage> visited = new HashSet<WebPage>();
+			HashSet<int> similarDoc = new HashSet<int>();
+			HashSet<int> visited = new HashSet<int>();
+			HashSet<int>[] skip = new HashSet<int>[NUMITER];
+			for (int i = 0; i < NUMITER; i++)
+				skip[i] = new HashSet<int>();
 
-			FindSimilar(similarDoc, wp);
-			visited.Add(wp);
+			this.FindSimilar(similarDoc, id, webpages[id].Signature, skip);
+			visited.Add(id);
 
 			while (similarDoc.Count != visited.Count)
 			{
-				WebPage sim = similarDoc.First(p => !visited.Contains(p));
-				FindSimilar(similarDoc, sim);
+				int sim = similarDoc.First(p => !visited.Contains(p));
+
+				this.FindSimilar(similarDoc, sim, webpages[sim].Signature, skip);
 				visited.Add(sim);
 			}
 
