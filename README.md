@@ -6,7 +6,7 @@ since the the program takes as input the file *Input.warc*.
 
 see [Report.pdf](./Report.pdf) for more deteils.
 
-###License
+### License
 The MIT License (MIT)
 
 Copyright (c) 2015 Federico Conte
